@@ -232,7 +232,11 @@ main_usage(void)
 #define OPT_I 
 #define OPT_T 
 #endif /* WITHOUT_MIRROR */
-"  -M logfile  log master keys to logfile in SSLKEYLOGFILE format\n"
+"  -M  logfile log master keys to logfile in SSLKEYLOGFILE format (<=1.2)\n"
+#if (OPENSSL_VERSION_NUMBER >= 0x10101000L) && !defined(LIBRESSL_VERSION_NUMBER)
+"  -B  logfile log master keys of inside (browser <-> sslsplit) traffic\n"
+"  -U  logfile log master keys of outside (sslsplit <-> server) traffic\n"
+#endif /* OpenSSL >= 1.1.1 && !LibreSSL */
 #ifdef HAVE_LOCAL_PROCINFO
 "  -i          look up local process owning each connection for logging\n"
 #define OPT_i "i"
@@ -331,7 +335,7 @@ main(int argc, char *argv[])
 
 	while ((ch = getopt(argc, argv,
 	                    OPT_g OPT_G OPT_Z OPT_i OPT_x OPT_T OPT_I
-	                    "k:c:C:K:t:A:OPa:b:s:r:R:e:Eu:m:j:p:l:L:S:F:M:"
+	                    "k:c:C:K:t:A:OPa:b:s:r:R:e:Eu:m:j:p:l:L:S:F:M:B:U:"
 	                    "dDVhW:w:q:f:o:X:Y:y:")) != -1) {
 		switch (ch) {
 			case 'f':
@@ -479,6 +483,12 @@ main(int argc, char *argv[])
 #endif /* HAVE_LOCAL_PROCINFO */
 			case 'M':
 				opts_set_masterkeylog(opts, argv0, optarg);
+				break;
+			case 'B':
+				opts_set_keylog_inside(opts, argv0, optarg);
+				break;
+			case 'U':
+				opts_set_keylog_outside(opts, argv0, optarg);
 				break;
 			case 'd':
 				opts_set_daemon(opts);

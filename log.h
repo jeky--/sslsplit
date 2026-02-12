@@ -58,6 +58,30 @@ extern logger_t *masterkey_log;
 #define log_masterkey_write_free(buf, sz) \
         logger_write_freebuf(masterkey_log, NULL, 0, (buf), (sz))
 
+extern logger_t *masterkey_inside_log;
+#define log_masterkey_inside_printf(fmt, ...) \
+        logger_printf(masterkey_inside_log, NULL, 0, (fmt), __VA_ARGS__)
+#define log_masterkey_inside_print(s) \
+        logger_print(masterkey_inside_log, NULL, 0, (s))
+#define log_masterkey_inside_write(buf, sz) \
+        logger_write(masterkey_inside_log, NULL, 0, (buf), (sz))
+#define log_masterkey_inside_print_free(s) \
+        logger_print_freebuf(masterkey_inside_log, NULL, 0, (s))
+#define log_masterkey_inside_write_free(buf, sz) \
+        logger_write_freebuf(masterkey_inside_log, NULL, 0, (buf), (sz))
+
+extern logger_t *masterkey_outside_log;
+#define log_masterkey_outside_printf(fmt, ...) \
+        logger_printf(masterkey_outside_log, NULL, 0, (fmt), __VA_ARGS__)
+#define log_masterkey_outside_print(s) \
+        logger_print(masterkey_outside_log, NULL, 0, (s))
+#define log_masterkey_outside_write(buf, sz) \
+        logger_write(masterkey_outside_log, NULL, 0, (buf), (sz))
+#define log_masterkey_outside_print_free(s) \
+        logger_print_freebuf(masterkey_outside_log, NULL, 0, (s))
+#define log_masterkey_outside_write_free(buf, sz) \
+        logger_write_freebuf(masterkey_outside_log, NULL, 0, (buf), (sz))
+
 extern logger_t *connect_log;
 #define log_connect_printf(fmt, ...) \
         logger_printf(connect_log, NULL, 0, (fmt), __VA_ARGS__)

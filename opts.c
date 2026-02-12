@@ -178,6 +178,12 @@ opts_free(opts_t *opts)
 	if (opts->masterkeylog) {
 		free(opts->masterkeylog);
 	}
+	if (opts->keylog_inside) {
+		free(opts->keylog_inside);
+	}
+	if (opts->keylog_outside) {
+		free(opts->keylog_outside);
+	}
 	if (opts->pcaplog) {
 		free(opts->pcaplog);
 	}
@@ -1240,6 +1246,48 @@ opts_set_masterkeylog(opts_t *opts, const char *argv0, const char *optarg)
 }
 
 void
+opts_set_keylog_inside(opts_t *opts, const char *argv0, const char *optarg)
+{
+	if (opts->keylog_inside)
+		free(opts->keylog_inside);
+	if (!(opts->keylog_inside = sys_realdir(optarg))) {
+		if (errno == ENOENT) {
+			fprintf(stderr, "Directory part of '%s' does not "
+			                "exist\n", optarg);
+			exit(EXIT_FAILURE);
+		} else {
+			fprintf(stderr, "Failed to realpath '%s': %s (%i)\n",
+			              optarg, strerror(errno), errno);
+			oom_die(argv0);
+		}
+	}
+#ifdef DEBUG_OPTS
+	log_dbg_printf("KeyLog InSide: %s\n", opts->keylog_inside);
+#endif /* DEBUG_OPTS */
+}
+
+void
+opts_set_keylog_outside(opts_t *opts, const char *argv0, const char *optarg)
+{
+	if (opts->keylog_outside)
+		free(opts->keylog_outside);
+	if (!(opts->keylog_outside = sys_realdir(optarg))) {
+		if (errno == ENOENT) {
+			fprintf(stderr, "Directory part of '%s' does not "
+			                "exist\n", optarg);
+			exit(EXIT_FAILURE);
+		} else {
+			fprintf(stderr, "Failed to realpath '%s': %s (%i)\n",
+			              optarg, strerror(errno), errno);
+			oom_die(argv0);
+		}
+	}
+#ifdef DEBUG_OPTS
+	log_dbg_printf("KeyLog OutSide: %s\n", opts->keylog_outside);
+#endif /* DEBUG_OPTS */
+}
+
+void
 opts_set_pcaplog(opts_t *opts, const char *argv0, const char *optarg)
 {
 	if (opts->pcaplog)
@@ -1506,6 +1554,10 @@ set_option(opts_t *opts, const char *argv0,
 #endif /* HAVE_LOCAL_PROCINFO */
 	} else if (!strcmp(name, "MasterKeyLog")) {
 		opts_set_masterkeylog(opts, argv0, value);
+	} else if (!strcmp(name, "KeyLogInSide")) {
+		opts_set_keylog_inside(opts, argv0, value);
+	} else if (!strcmp(name, "KeyLogOutSide")) {
+		opts_set_keylog_outside(opts, argv0, value);
 	} else if (!strcmp(name, "PcapLog")) {
 		opts_set_pcaplog(opts, argv0, value);
 	} else if (!strcmp(name, "PcapLogDir")) {

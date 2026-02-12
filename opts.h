@@ -102,6 +102,8 @@ typedef struct opts {
 	char *contentlog;
 	char *contentlog_basedir; /* static part of logspec for privsep srv */
 	char *masterkeylog;
+	char *keylog_inside;
+	char *keylog_outside;
 	char *pcaplog;
 	char *pcaplog_basedir; /* static part of pcap logspec for privsep srv */
 #ifndef WITHOUT_MIRROR
@@ -186,6 +188,8 @@ void opts_set_contentlogpathspec(opts_t *, const char *, const char *)
 void opts_set_lprocinfo(opts_t *) NONNULL(1);
 #endif /* HAVE_LOCAL_PROCINFO */
 void opts_set_masterkeylog(opts_t *, const char *, const char *) NONNULL(1,2,3);
+void opts_set_keylog_inside(opts_t *, const char *, const char *) NONNULL(1,2,3);
+void opts_set_keylog_outside(opts_t *, const char *, const char *) NONNULL(1,2,3);
 void opts_set_pcaplog(opts_t *, const char *, const char *) NONNULL(1,2,3);
 void opts_set_pcaplogdir(opts_t *, const char *, const char *)
      NONNULL(1,2,3);

@@ -209,6 +209,41 @@ typedef struct pxy_conn_ctx {
 #define WANT_CONTENT_LOG(ctx)	(((ctx)->opts->contentlog||(ctx)->opts->pcaplog)&&!(ctx)->passthrough)
 #endif /* WITHOUT_MIRROR */
 
+
+#if (OPENSSL_VERSION_NUMBER >= 0x10101000L) && !defined(LIBRESSL_VERSION_NUMBER)
+/*
+ * CallBack functions for OpenSSL >= 1.1.1 that allow the session key
+ * logging, intended to be used to decrypt externally captured network
+ * traffic using tools like Wireshark.
+ *
+ * Fully compatible with TLS1.3.
+ *
+ * https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/Key_Log_Format
+ */
+
+/* CallBack for internal side (between browser and sslsplit) */
+static void
+ssl_keylog_inside_cb(const SSL *ssl, const char *line)
+{
+    (void)ssl;
+    char *buf = NULL;
+    if (!masterkey_inside_log) return;
+    if (asprintf(&buf, "%s\n", line) < 0) return;
+    log_masterkey_inside_print_free(buf);
+}
+
+/* CallBack for the Internet side (between sslsplit and the server) */
+static void
+ssl_keylog_outside_cb(const SSL *ssl, const char *line)
+{
+    (void)ssl;
+    char *buf = NULL;
+    if (!masterkey_outside_log) return;
+    if (asprintf(&buf, "%s\n", line) < 0) return;
+    log_masterkey_outside_print_free(buf);
+}
+#endif /* OpenSSL >= 1.1.1 && !LibreSSL */
+
 static void
 add_line_to_content_log(const char *line, logbuf_t **plb, logbuf_t **ptail) {
 	logbuf_t *tmp;
@@ -789,6 +824,12 @@ pxy_srcsslctx_create(pxy_conn_ctx_t *ctx, X509 *crt, STACK_OF(X509) *chain,
 		return NULL;
 	}
 
+	#if (OPENSSL_VERSION_NUMBER >= 0x10101000L) && !defined(LIBRESSL_VERSION_NUMBER)
+	if(ctx->opts->keylog_inside){
+		SSL_CTX_set_keylog_callback(sslctx, ssl_keylog_inside_cb);
+	}
+	#endif
+
 	pxy_sslctx_setoptions(sslctx, ctx);
 
 #if (OPENSSL_VERSION_NUMBER >= 0x10100000L) && !defined(LIBRESSL_VERSION_NUMBER)
@@ -1205,6 +1246,12 @@ pxy_dstssl_create(pxy_conn_ctx_t *ctx)
 		ctx->enomem = 1;
 		return NULL;
 	}
+
+	#if (OPENSSL_VERSION_NUMBER >= 0x10101000L) && !defined(LIBRESSL_VERSION_NUMBER)
+	if(ctx->opts->keylog_outside){
+		SSL_CTX_set_keylog_callback(sslctx, ssl_keylog_outside_cb);
+	}
+	#endif
 
 	pxy_sslctx_setoptions(sslctx, ctx);
 

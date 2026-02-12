@@ -170,6 +170,14 @@ privsep_server_openfile_verify(opts_t *opts, const char *fn, UNUSED int mkpath)
 			if (strstr(fn, opts->masterkeylog) == fn)
 				break;
 		}
+		if (opts->keylog_inside) {
+			if (strstr(fn, opts->keylog_inside) == fn)
+				break;
+		}
+		if (opts->keylog_outside) {
+			if (strstr(fn, opts->keylog_outside) == fn)
+				break;
+		}
 		return -1;
 	} while (0);
 

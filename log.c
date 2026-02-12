@@ -243,6 +243,144 @@ log_masterkey_fini(void)
 	masterkey_fd = -1;
 }
 
+/*
+ * Modern key log for internal side (between browser and sslsplit).
+ * Logs master keys in SSLKEYLOGFILE format.
+ * Uses a logger thread.
+ */
+
+logger_t *masterkey_inside_log = NULL;
+static int masterkey_inside_fd = -1;
+static char *masterkey_inside_fn = NULL;
+static int masterkey_inside_clisock = -1;
+
+static int
+log_masterkey_inside_preinit(const char *logfile)
+{
+	masterkey_inside_fd = open(logfile, O_WRONLY|O_APPEND|O_CREAT, DFLT_FILEMODE);
+	if (masterkey_inside_fd == -1) {
+		log_err_printf("Failed to open '%s' for writing: %s (%i)\n",
+		               logfile, strerror(errno), errno);
+		return -1;
+	}
+	masterkey_inside_fn = strdup(logfile);
+	if (!masterkey_inside_fn) {
+		close(masterkey_inside_fd);
+		masterkey_inside_fd = -1;
+		return -1;
+	}
+	return 0;
+}
+
+static int
+log_masterkey_inside_reopencb(void)
+{
+	close(masterkey_inside_fd);
+	masterkey_inside_fd = privsep_client_openfile(masterkey_inside_clisock,
+	                                       masterkey_inside_fn,
+	                                       0);
+	if (masterkey_inside_fd == -1) {
+		log_err_printf("Failed to open '%s' for writing: %s\n",
+		               masterkey_inside_fn, strerror(errno));
+		free(masterkey_inside_fn);
+		masterkey_inside_fn = NULL;
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * Do the actual write to the open internal key log file descriptor.
+ */
+static ssize_t
+log_masterkey_inside_writecb(UNUSED void *fh, UNUSED unsigned long ctl,
+                      const void *buf, size_t sz)
+{
+	if (write(masterkey_inside_fd, buf, sz) == -1) {
+		log_err_printf("Warning: Failed to write to masterkey_inside log:"
+		               " %s\n", strerror(errno));
+		return -1;
+	}
+	return sz;
+}
+
+static void
+log_masterkey_inside_fini(void)
+{
+	if (masterkey_inside_fd != -1)
+		close(masterkey_inside_fd);
+	masterkey_inside_fd = -1;
+}
+
+/*
+ * Modern key log for Interned side (between sslsplit and server).
+ * Logs master keys in SSLKEYLOGFILE format.
+ * Uses a logger thread.
+ */
+
+logger_t *masterkey_outside_log = NULL;
+static int masterkey_outside_fd = -1;
+static char *masterkey_outside_fn = NULL;
+static int masterkey_outside_clisock = -1;
+
+static int
+log_masterkey_outside_preinit(const char *logfile)
+{
+	masterkey_outside_fd = open(logfile, O_WRONLY|O_APPEND|O_CREAT, DFLT_FILEMODE);
+	if (masterkey_outside_fd == -1) {
+		log_err_printf("Failed to open '%s' for writing: %s (%i)\n",
+		               logfile, strerror(errno), errno);
+		return -1;
+	}
+	masterkey_outside_fn = strdup(logfile);
+	if (!masterkey_outside_fn) {
+		close(masterkey_outside_fd);
+		masterkey_outside_fd = -1;
+		return -1;
+	}
+	return 0;
+}
+
+static int
+log_masterkey_outside_reopencb(void)
+{
+	close(masterkey_outside_fd);
+	masterkey_outside_fd = privsep_client_openfile(masterkey_outside_clisock,
+	                                       masterkey_outside_fn,
+	                                       0);
+	if (masterkey_outside_fd == -1) {
+		log_err_printf("Failed to open '%s' for writing: %s\n",
+		               masterkey_outside_fn, strerror(errno));
+		free(masterkey_outside_fn);
+		masterkey_outside_fn = NULL;
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * Do the actual write to the open external key log file descriptor.
+ */
+static ssize_t
+log_masterkey_outside_writecb(UNUSED void *fh, UNUSED unsigned long ctl,
+                      const void *buf, size_t sz)
+{
+	if (write(masterkey_outside_fd, buf, sz) == -1) {
+		log_err_printf("Warning: Failed to write to masterkey_outside log:"
+		               " %s\n", strerror(errno));
+		return -1;
+	}
+	return sz;
+}
+
+static void
+log_masterkey_outside_fini(void)
+{
+	if (masterkey_outside_fd != -1)
+		close(masterkey_outside_fd);
+	masterkey_outside_fd = -1;
+}
+
 
 /*
  * Connection log.  Logs a one-liner to a file-based connection log.
@@ -1611,6 +1749,28 @@ log_preinit(opts_t *opts)
 			goto out;
 		}
 	}
+	if (opts->keylog_inside) {
+		if (log_masterkey_inside_preinit(opts->keylog_inside) == -1)
+			goto out;
+		if (!(masterkey_inside_log = logger_new(log_masterkey_inside_reopencb,
+		                                 NULL, NULL,
+		                                 log_masterkey_inside_writecb, NULL,
+		                                 log_exceptcb))) {
+			log_masterkey_inside_fini();
+			goto out;
+		}
+	}
+	if (opts->keylog_outside) {
+		if (log_masterkey_outside_preinit(opts->keylog_outside) == -1)
+			goto out;
+		if (!(masterkey_outside_log = logger_new(log_masterkey_outside_reopencb,
+		                                 NULL, NULL,
+		                                 log_masterkey_outside_writecb, NULL,
+		                                 log_exceptcb))) {
+			log_masterkey_outside_fini();
+			goto out;
+		}
+	}
 	if (opts->certgendir) {
 		if (!(cert_log = logger_new(NULL, NULL, NULL, log_cert_writecb,
 		                            NULL, log_exceptcb)))
@@ -1647,6 +1807,14 @@ out:
 		log_masterkey_fini();
 		logger_free(masterkey_log);
 	}
+	if (masterkey_inside_log) {
+		log_masterkey_inside_fini();
+		logger_free(masterkey_inside_log);
+	}
+	if (masterkey_outside_log) {
+		log_masterkey_outside_fini();
+		logger_free(masterkey_outside_log);
+	}
 	return -1;
 }
 
@@ -1680,6 +1848,14 @@ log_preinit_undo(void)
 		log_masterkey_fini();
 		logger_free(masterkey_log);
 	}
+	if (masterkey_inside_log) {
+		log_masterkey_inside_fini();
+		logger_free(masterkey_inside_log);
+	}
+	if (masterkey_outside_log) {
+		log_masterkey_outside_fini();
+		logger_free(masterkey_outside_log);
+	}
 }
 
 /*
@@ -1687,7 +1863,7 @@ log_preinit_undo(void)
  * Return -1 on errors, 0 otherwise.
  */
 int
-log_init(opts_t *opts, proxy_ctx_t *ctx, int clisock[5])
+log_init(opts_t *opts, proxy_ctx_t *ctx, int clisock[7])
 {
 	proxy_ctx = ctx;
 	if (err_log)
@@ -1703,6 +1879,22 @@ log_init(opts_t *opts, proxy_ctx_t *ctx, int clisock[5])
 			return -1;
 	} else {
 		privsep_client_close(clisock[0]);
+	}
+
+	if (masterkey_inside_log) {
+		masterkey_inside_clisock = clisock[5];
+		if (logger_start(masterkey_inside_log) == -1)
+			return -1;
+	} else {
+		privsep_client_close(clisock[5]);
+	}
+
+	if (masterkey_outside_log) {
+		masterkey_outside_clisock = clisock[6];
+		if (logger_start(masterkey_outside_log) == -1)
+			return -1;
+	} else {
+		privsep_client_close(clisock[6]);
 	}
 
 	if (connect_log) {
@@ -1761,6 +1953,10 @@ log_fini(void)
 		logger_leave(cert_log);
 	if (masterkey_log)
 		logger_leave(masterkey_log);
+	if (masterkey_inside_log)
+		logger_leave(masterkey_inside_log);
+	if (masterkey_outside_log)
+		logger_leave(masterkey_outside_log);
 #ifndef WITHOUT_MIRROR
 	if (content_mirror_log)
 		logger_leave(content_mirror_log);
@@ -1778,6 +1974,10 @@ log_fini(void)
 		logger_join(cert_log);
 	if (masterkey_log)
 		logger_join(masterkey_log);
+	if (masterkey_inside_log)
+		logger_join(masterkey_inside_log);
+	if (masterkey_outside_log)
+		logger_join(masterkey_outside_log);
 #ifndef WITHOUT_MIRROR
 	if (content_mirror_log)
 		logger_join(content_mirror_log);
@@ -1795,6 +1995,10 @@ log_fini(void)
 		logger_free(cert_log);
 	if (masterkey_log)
 		logger_free(masterkey_log);
+	if (masterkey_inside_log)
+		logger_free(masterkey_inside_log);
+	if (masterkey_outside_log)
+		logger_free(masterkey_outside_log);
 #ifndef WITHOUT_MIRROR
 	if (content_mirror_log)
 		logger_free(content_mirror_log);
@@ -1810,6 +2014,10 @@ log_fini(void)
 
 	if (masterkey_log)
 		log_masterkey_fini();
+	if (masterkey_inside_log)
+		log_masterkey_inside_fini();
+	if (masterkey_outside_log)
+		log_masterkey_outside_fini();
 #ifndef WITHOUT_MIRROR
 	if (content_mirror_log)
 		log_content_mirror_fini();
@@ -1823,6 +2031,10 @@ log_fini(void)
 
 	if (masterkey_clisock != -1)
 		privsep_client_close(masterkey_clisock);
+	if (masterkey_inside_clisock != -1)
+		privsep_client_close(masterkey_inside_clisock);
+	if (masterkey_outside_clisock != -1)
+		privsep_client_close(masterkey_outside_clisock);
 	if (cert_clisock != -1)
 		privsep_client_close(cert_clisock);
 	if (content_file_clisock != -1)
@@ -1840,6 +2052,12 @@ log_reopen(void)
 
 	if (masterkey_log)
 		if (logger_reopen(masterkey_log) == -1)
+			rv = -1;
+	if (masterkey_inside_log)
+		if (logger_reopen(masterkey_inside_log) == -1)
+			rv = -1;
+	if (masterkey_outside_log)
+		if (logger_reopen(masterkey_outside_log) == -1)
 			rv = -1;
 	if (content_pcap_log)
 		if (logger_reopen(content_pcap_log) == -1)
